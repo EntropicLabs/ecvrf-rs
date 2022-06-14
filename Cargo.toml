@@ -8,5 +8,4 @@ edition = "2021"
 [dependencies]
 hex = "0.4.3"
 sha2 = "0.10.2"
-bigint = "4.4.3"
 curve25519-dalek = { git = "https://github.com/AmitPr/curve25519-dalek" }

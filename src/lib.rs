@@ -1,5 +1,3 @@
-
-use bigint::U256;
 use curve25519_dalek::{
     constants::{BASEPOINT_ORDER, ED25519_BASEPOINT_POINT},
     edwards::{CompressedEdwardsY, EdwardsPoint},
@@ -135,7 +133,7 @@ pub mod proof;
 mod tests {
     use crate::*;
     #[test]
-    fn test_proof_parts() {
+    fn test_extract_pk_scalar() {
         let secret_key =
             hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
                 .unwrap();
@@ -145,17 +143,20 @@ mod tests {
         let secret_scalar =
             hex::decode("307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f")
                 .unwrap();
-        let h = hex::decode("1c5672d919cc0a800970cd7e05cb36ed27ed354c33519948e5a9eaf89aee12b7")
-            .unwrap();
-
         let secret_key = SecretKey::from_slice(&secret_key);
         let (pk, scalar) = secret_key.extract_public_key_and_scalar();
         assert_eq!(pk.as_bytes(), public_key.as_slice());
         assert_eq!(scalar.as_bytes(), secret_scalar.as_slice());
-
+    }
+    #[test]
+    fn test_hash_to_curve(){
+        let pk = hex::decode("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a").unwrap();
+        let h = hex::decode("1c5672d919cc0a800970cd7e05cb36ed27ed354c33519948e5a9eaf89aee12b7")
+            .unwrap();
+        
+        let pk = PublicKey::from_bytes(&pk);
         let alpha_string = b"";
         let point = ecvrf_hash_to_curve_ell2(&pk, alpha_string);
-        let k = ecvrf_nonce_gen(&secret_key, point);
         assert_eq!(point.compress().as_bytes(), h.as_slice());
     }
 
