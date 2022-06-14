@@ -74,3 +74,25 @@ impl PublicKey {
         &self.point
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_pk_scalar() {
+        let secret_key =
+            hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+                .unwrap();
+        let public_key =
+            hex::decode("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+                .unwrap();
+        let secret_scalar =
+            hex::decode("307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f")
+                .unwrap();
+        let secret_key = SecretKey::from_slice(&secret_key);
+        let (pk, scalar) = secret_key.extract_public_key_and_scalar();
+        assert_eq!(pk.as_bytes(), public_key.as_slice());
+        assert_eq!(scalar.as_bytes(), secret_scalar.as_slice());
+    }
+}
