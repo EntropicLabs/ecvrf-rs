@@ -17,16 +17,18 @@ impl SecretKey {
     }
     pub fn from_slice(bytes: &[u8]) -> Self {
         let mut b = [0u8; 32];
-        b.copy_from_slice(&bytes);
+        b.copy_from_slice(bytes);
         SecretKey { bytes: b }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
+
     pub fn to_bytes(&self) -> [u8; 32] {
         self.bytes
     }
+
     pub fn extract_public_key_and_scalar(&self) -> (PublicKey, Scalar) {
         let mut hasher = Sha512::new();
         hasher.update(&self.bytes);
@@ -57,19 +59,23 @@ impl PublicKey {
     pub fn new(point: CompressedEdwardsY) -> Self {
         PublicKey { point }
     }
+
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut b = [0u8; 32];
-        b.copy_from_slice(&bytes);
+        b.copy_from_slice(bytes);
         PublicKey {
             point: CompressedEdwardsY::from_slice(&b),
         }
     }
+
     pub fn as_bytes(&self) -> &[u8] {
         self.point.as_bytes()
     }
+
     pub fn to_bytes(&self) -> [u8; 32] {
         self.point.to_bytes()
     }
+
     pub fn as_point(&self) -> &CompressedEdwardsY {
         &self.point
     }
@@ -96,3 +102,4 @@ mod tests {
         assert_eq!(scalar.as_bytes(), secret_scalar.as_slice());
     }
 }
+

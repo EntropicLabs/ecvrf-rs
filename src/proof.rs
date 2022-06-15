@@ -13,7 +13,7 @@ impl Proof {
     pub fn new(secret_key: &SecretKey, message: impl AsRef<[u8]>) -> Self {
         prove(secret_key, message.as_ref())
     }
-    
+
     pub fn verify(&self) -> Result<[u8; 64], ()> {
         verify_proof(self)
     }
