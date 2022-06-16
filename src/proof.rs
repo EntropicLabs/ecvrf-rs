@@ -1,4 +1,5 @@
 use crate::{
+    errors::VRFError,
     keys::{PublicKey, SecretKey},
     utils::{prove, verify_proof},
 };
@@ -10,11 +11,11 @@ pub struct Proof {
 }
 
 impl Proof {
-    pub fn new(secret_key: &SecretKey, message: impl AsRef<[u8]>) -> Self {
+    pub fn new(secret_key: &SecretKey, message: impl AsRef<[u8]>) -> Result<Self, VRFError> {
         prove(secret_key, message.as_ref())
     }
 
-    pub fn verify(&self) -> Result<[u8; 64], ()> {
+    pub fn verify(&self) -> Result<[u8; 64], VRFError> {
         verify_proof(self)
     }
 }

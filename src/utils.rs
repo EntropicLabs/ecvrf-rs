@@ -6,6 +6,7 @@ use curve25519_dalek::{
 use sha2::{Digest, Sha512};
 
 use crate::{
+    errors::VRFError,
     keys::{PublicKey, SecretKey},
     proof::Proof,
 };
@@ -28,7 +29,7 @@ pub fn hash_to_curve_ell2(pk: &PublicKey, alpha_string: &[u8]) -> EdwardsPoint {
 /// ECVRF nonce generation according to Section 5.1.6 of [RFC8032](https://tools.ietf.org/html/rfc8032).
 pub fn nonce_gen(sk: &SecretKey, point: EdwardsPoint) -> [u8; 64] {
     let key_hash: [u8; 32] = sha512(&sk)[32..].try_into().unwrap();
-    let v = [&key_hash[..], &point.compress().as_bytes()[..]].concat();
+    let v = [&key_hash[..], point.compress().as_bytes()].concat();
 
     sha512(&v)
 }
@@ -38,39 +39,46 @@ pub fn hash_points(points: &[&CompressedEdwardsY]) -> [u8; 32] {
     let mut v = vec![4u8, 2u8];
     points
         .iter()
-        .for_each(|p| v.extend_from_slice(&p.as_bytes()[..]));
+        .for_each(|p| v.extend_from_slice(p.as_bytes()));
     let mut hash: [u8; 32] = [0u8; 32];
     hash[..16].copy_from_slice(&sha512(&v)[..16]);
     hash
 }
 
-pub fn decode_proof(proof_bytes: &[u8]) -> ([u8; 32], [u8; 16], [u8; 32]) {
+pub fn decode_proof(proof_bytes: &[u8]) -> Result<([u8; 32], [u8; 16], [u8; 32]), VRFError> {
     let gamma = &proof_bytes[..32];
     let c = &proof_bytes[32..48];
     let s = &proof_bytes[48..80];
-    (
-        gamma.try_into().unwrap(),
-        c.try_into().unwrap(),
-        s.try_into().unwrap(),
-    )
+    Ok((
+        gamma
+            .try_into()
+            .map_err(|_| VRFError::DecodeProofError {})?,
+        c.try_into().map_err(|_| VRFError::DecodeProofError {})?,
+        s.try_into().map_err(|_| VRFError::DecodeProofError {})?,
+    ))
 }
 
-pub fn proof_to_hash(proof_bytes: &[u8]) -> [u8; 64] {
-    let (gamma, _, _) = decode_proof(proof_bytes);
+pub fn proof_to_hash(proof_bytes: &[u8]) -> Result<[u8; 64], VRFError> {
+    let (gamma, _, _) = decode_proof(proof_bytes)?;
     let gamma = CompressedEdwardsY::from_slice(&gamma);
-    let gamma = gamma.decompress().unwrap().mul_by_cofactor().compress();
+    let gamma = gamma
+        .decompress()
+        .ok_or(VRFError::InvalidProof {})?
+        .mul_by_cofactor()
+        .compress();
     let v = [&[4u8, 3u8], &gamma.as_bytes()[..], &[0u8]].concat();
 
-    sha512(&v)
+    Ok(sha512(&v))
 }
 
-pub fn verify_proof(proof: &Proof) -> Result<[u8; 64], ()> {
-    let pk_point = proof.signer.as_point().decompress();
-    if pk_point.is_none() {
-        return Err(());
-    }
-    let pk_point = pk_point.unwrap();
-    let (gamma, c, s) = decode_proof(&proof.proof_bytes);
+pub fn verify_proof(proof: &Proof) -> Result<[u8; 64], VRFError> {
+    let pk_point = proof
+        .signer
+        .as_point()
+        .decompress()
+        .ok_or(VRFError::InvalidPublicKey {})?;
+
+    let (gamma, c, s) = decode_proof(&proof.proof_bytes)?;
     let point = hash_to_curve_ell2(&proof.signer, &proof.message_bytes);
     let c = Scalar::from_bits([&c[..], &[0u8; 16]].concat().try_into().unwrap());
     let s = Scalar::from_bits(s);
@@ -81,7 +89,7 @@ pub fn verify_proof(proof: &Proof) -> Result<[u8; 64], ()> {
     let u = s_b - c_y;
 
     let s_h = s * point;
-    let c_g = c * gamma.decompress().unwrap();
+    let c_g = c * gamma.decompress().ok_or(VRFError::InvalidProof {})?;
     let v = s_h - c_g;
 
     let c_prime = hash_points(&[
@@ -93,15 +101,15 @@ pub fn verify_proof(proof: &Proof) -> Result<[u8; 64], ()> {
     ]);
 
     if c_prime == c.to_bytes() {
-        Ok(proof_to_hash(&proof.proof_bytes))
+        Ok(proof_to_hash(&proof.proof_bytes)?)
     } else {
-        Err(())
+        Err(VRFError::InvalidProof {})
     }
 }
 
-pub fn prove(secret_key: &SecretKey, alpha_string: &[u8]) -> Proof {
+pub fn prove(secret_key: &SecretKey, alpha_string: &[u8]) -> Result<Proof, VRFError> {
     // Extract the public key and VRF scalar from the secret key
-    let (pk, scalar) = secret_key.extract_public_key_and_scalar();
+    let (pk, scalar) = secret_key.extract_public_key_and_scalar()?;
 
     // Compute the point on the curve corresponding to the hash of the input
     let point = hash_to_curve_ell2(&pk, alpha_string);
@@ -123,11 +131,11 @@ pub fn prove(secret_key: &SecretKey, alpha_string: &[u8]) -> Proof {
 
     let pi_string = [&gamma.as_bytes()[..], &c[..16], &s.to_bytes()[..]].concat();
 
-    Proof {
+    Ok(Proof {
         signer: pk,
         message_bytes: alpha_string.to_vec(),
         proof_bytes: pi_string,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -172,9 +180,9 @@ mod tests {
                 .unwrap();
 
         let alpha_string = b"";
-        let proof = prove(&SecretKey::from_slice(&secret_key), alpha_string);
+        let proof = prove(&SecretKey::from_slice(&secret_key), alpha_string).unwrap();
         assert_eq!(proof.proof_bytes, hex::decode("b6b4699f87d56126c9117a7da55bd0085246f4c56dbc95d20172612e9d38e8d7c3a8dc589866501fe1724fc5ef3b32412d2983949049428b4ebbc86bdfbbbc4e0c51cb22e78ed55fd1ad4743014f6701").unwrap().as_slice());
-        let beta_string = proof_to_hash(&proof.proof_bytes);
+        let beta_string = proof_to_hash(&proof.proof_bytes).unwrap();
         assert_eq!(beta_string, hex::decode("e84a28279ee1af17a63917d185ef7946a7a51b844a2b99f3f835d7862f4cf26629fd5f53d51ae4100e5644db915738cf3f76d06757c8f7538057f5834111c6e7").unwrap().as_slice());
     }
 }

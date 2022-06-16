@@ -7,3 +7,4 @@ edition = "2021"
 hex = "0.4.3"
 sha2 = "0.10.2"
 curve25519-dalek = { git = "https://github.com/AmitPr/curve25519-dalek" }
+thiserror = "1.0.31"

@@ -3,6 +3,8 @@ use curve25519_dalek::{
 };
 use sha2::{Digest, Sha512};
 
+use crate::errors::VRFError;
+
 pub struct SecretKey {
     bytes: [u8; 32],
 }
@@ -29,7 +31,7 @@ impl SecretKey {
         self.bytes
     }
 
-    pub fn extract_public_key_and_scalar(&self) -> (PublicKey, Scalar) {
+    pub fn extract_public_key_and_scalar(&self) -> Result<(PublicKey, Scalar), VRFError> {
         let mut hasher = Sha512::new();
         hasher.update(&self.bytes);
         let hash: [u8; 64] = hasher.finalize().into();
@@ -42,10 +44,13 @@ impl SecretKey {
         let scalar = Scalar::from_bits(digest);
 
         let point = &scalar * &ED25519_BASEPOINT_TABLE;
+        if point.mul_by_cofactor().compress() == CompressedEdwardsY::default() {
+            return Err(VRFError::InvalidSecretKey {});
+        }
         let pk = PublicKey {
             point: point.compress(),
         };
-        (pk, scalar)
+        Ok((pk, scalar))
     }
 }
 
@@ -97,9 +102,8 @@ mod tests {
             hex::decode("307c83864f2833cb427a2ef1c00a013cfdff2768d980c0a3a520f006904de94f")
                 .unwrap();
         let secret_key = SecretKey::from_slice(&secret_key);
-        let (pk, scalar) = secret_key.extract_public_key_and_scalar();
+        let (pk, scalar) = secret_key.extract_public_key_and_scalar().unwrap();
         assert_eq!(pk.as_bytes(), public_key.as_slice());
         assert_eq!(scalar.as_bytes(), secret_scalar.as_slice());
     }
 }
-
