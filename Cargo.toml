@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 hex = { version = "0.4.3", features = ["serde"] }
 sha2 = "0.10.2"
-curve25519-dalek = { git = "https://github.com/AmitPr/curve25519-dalek" }
+curve25519-dalek = { git = "https://github.com/AmitPr/curve25519-dalek", default-features = false, features = ["alloc", "u64_backend"] }
 thiserror = "1.0.31"
 schemars = "0.8.8"
 serde = { version = "1.0.137", default-features = false, features = ["derive"] }
