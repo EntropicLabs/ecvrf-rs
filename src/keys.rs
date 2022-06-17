@@ -14,7 +14,7 @@ use sha2::{Digest, Sha512};
 
 use crate::errors::VRFError;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct SecretKey {
     #[serde(
@@ -58,7 +58,7 @@ impl JsonSchema for SecretKey {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct PublicKey {
     #[serde(
