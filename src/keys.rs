@@ -1,3 +1,5 @@
+use core::fmt;
+
 use curve25519_dalek::{
     constants::ED25519_BASEPOINT_TABLE, edwards::CompressedEdwardsY, scalar::Scalar,
 };
@@ -20,6 +22,15 @@ pub struct SecretKey {
         deserialize_with = "hex::serde::deserialize"
     )]
     bytes: [u8; 32],
+}
+impl fmt::Display for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in &self.bytes {
+            // Decide if you want to pad the value or have spaces inbetween, etc.
+            write!(f, "{:x}", byte)?;
+        }
+        Ok(())
+    }
 }
 
 impl JsonSchema for SecretKey {
@@ -56,6 +67,16 @@ pub struct PublicKey {
         rename = "bytes"
     )]
     point: CompressedEdwardsY,
+}
+
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for byte in self.point.as_bytes() {
+            // Decide if you want to pad the value or have spaces inbetween, etc.
+            write!(f, "{:x}", byte)?;
+        }
+        Ok(())
+    }
 }
 
 impl JsonSchema for PublicKey {
