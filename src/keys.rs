@@ -1,15 +1,8 @@
-use core::fmt;
-
 use curve25519_dalek::{
     constants::ED25519_BASEPOINT_TABLE, edwards::CompressedEdwardsY, scalar::Scalar,
 };
 
-use schemars::{
-    gen::SchemaGenerator,
-    schema::{InstanceType, Schema, SchemaObject},
-    JsonSchema,
-};
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
 use crate::errors::VRFError;
@@ -18,103 +11,21 @@ use crate::errors::VRFError;
 #[serde(rename_all = "snake_case")]
 pub struct SecretKey {
     #[serde(
-        serialize_with = "hex::serde::serialize",
-        deserialize_with = "hex::serde::deserialize"
+        serialize_with = "crate::traits::serialize_bytes",
+        deserialize_with = "crate::traits::sk_bytes_from_hex"
     )]
-    bytes: [u8; 32],
-}
-impl fmt::Display for SecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for byte in &self.bytes {
-            // Decide if you want to pad the value or have spaces inbetween, etc.
-            write!(f, "{:x}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-impl JsonSchema for SecretKey {
-    fn schema_name() -> String {
-        "SecretKey".to_owned()
-    }
-    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        let mut schema_object = SchemaObject {
-            instance_type: Some(InstanceType::Object.into()),
-            ..Default::default()
-        };
-        let object_validation = schema_object.object();
-
-        let mut fixed_size_string = gen.subschema_for::<String>();
-        if let Schema::Object(schema_object) = &mut fixed_size_string {
-            let validation = schema_object.string();
-            validation.min_length = Some(64u32);
-            validation.max_length = Some(64u32);
-        }
-        object_validation
-            .properties
-            .insert("bytes".to_owned(), fixed_size_string);
-        object_validation.required.insert("bytes".to_owned());
-        Schema::Object(schema_object)
-    }
+    pub(crate) bytes: [u8; 32],
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub struct PublicKey {
     #[serde(
-        serialize_with = "hex::serde::serialize",
-        deserialize_with = "from_hex",
+        serialize_with = "crate::traits::serialize_point",
+        deserialize_with = "crate::traits::point_from_hex",
         rename = "bytes"
     )]
-    point: CompressedEdwardsY,
-}
-
-impl fmt::Display for PublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for byte in self.point.as_bytes() {
-            // Decide if you want to pad the value or have spaces inbetween, etc.
-            write!(f, "{:x}", byte)?;
-        }
-        Ok(())
-    }
-}
-
-impl JsonSchema for PublicKey {
-    fn schema_name() -> String {
-        "PublicKey".to_owned()
-    }
-    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        let mut schema_object = SchemaObject {
-            instance_type: Some(InstanceType::Object.into()),
-            ..Default::default()
-        };
-        let object_validation = schema_object.object();
-
-        let mut fixed_size_string = gen.subschema_for::<String>();
-        if let Schema::Object(schema_object) = &mut fixed_size_string {
-            let validation = schema_object.string();
-            validation.min_length = Some(64u32);
-            validation.max_length = Some(64u32);
-        }
-        object_validation
-            .properties
-            .insert("bytes".to_owned(), fixed_size_string);
-        object_validation.required.insert("bytes".to_owned());
-        Schema::Object(schema_object)
-    }
-}
-
-fn from_hex<'de, D>(deserializer: D) -> Result<CompressedEdwardsY, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: &str = Deserialize::deserialize(deserializer)?;
-    // do better hex decoding than this
-    Ok(CompressedEdwardsY::from_slice(
-        hex::decode(s)
-            .map_err(|_| D::Error::custom("Invalid hex string"))?
-            .as_slice(),
-    ))
+    pub(crate) point: CompressedEdwardsY,
 }
 
 impl SecretKey {
@@ -158,11 +69,6 @@ impl SecretKey {
     }
 }
 
-impl AsRef<[u8]> for SecretKey {
-    fn as_ref(&self) -> &[u8] {
-        &self.bytes
-    }
-}
 
 impl PublicKey {
     pub fn new(point: CompressedEdwardsY) -> Self {
