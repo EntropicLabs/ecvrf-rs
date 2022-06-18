@@ -2,29 +2,17 @@ use curve25519_dalek::{
     constants::ED25519_BASEPOINT_TABLE, edwards::CompressedEdwardsY, scalar::Scalar,
 };
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha512};
 
 use crate::errors::VRFError;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SecretKey {
-    #[serde(
-        serialize_with = "crate::traits::serialize_bytes",
-        deserialize_with = "crate::traits::sk_bytes_from_hex"
-    )]
     pub(crate) bytes: [u8; 32],
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PublicKey {
-    #[serde(
-        serialize_with = "crate::traits::serialize_point",
-        deserialize_with = "crate::traits::point_from_hex",
-        rename = "bytes"
-    )]
     pub(crate) point: CompressedEdwardsY,
 }
 
@@ -68,7 +56,6 @@ impl SecretKey {
         Ok((pk, scalar))
     }
 }
-
 
 impl PublicKey {
     pub fn new(point: CompressedEdwardsY) -> Self {

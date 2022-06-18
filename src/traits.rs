@@ -1,12 +1,14 @@
 use core::fmt;
 
-use curve25519_dalek::edwards::CompressedEdwardsY;
 use schemars::{
     gen::SchemaGenerator,
     schema::{InstanceType, Schema, SchemaObject},
     JsonSchema,
 };
-use serde::{de::Error, Deserialize, Deserializer, Serializer};
+use serde::{
+    de::{Error, Visitor},
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 use crate::{PublicKey, SecretKey};
 use std::{fmt::Write, num::ParseIntError};
@@ -39,6 +41,91 @@ impl fmt::Display for SecretKey {
     }
 }
 
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", encode_hex(self.point.as_bytes()))?;
+        Ok(())
+    }
+}
+
+impl Serialize for PublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&encode_hex(self.point.as_bytes()))
+    }
+}
+
+impl Serialize for SecretKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&encode_hex(self.as_bytes()))
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PublicKeyVisitor;
+
+        impl<'de> Visitor<'de> for PublicKeyVisitor {
+            type Value = PublicKey;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("PublicKey bytes")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(PublicKey::from_bytes(
+                    decode_hex(v)
+                        .map_err(|_| E::custom("Error decoding PublicKey bytes"))?
+                        .as_slice(),
+                ))
+            }
+        }
+
+        deserializer.deserialize_str(PublicKeyVisitor)
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SecretKeyVisitor;
+
+        impl<'de> Visitor<'de> for SecretKeyVisitor {
+            type Value = SecretKey;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("SecretKey bytes")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                Ok(SecretKey::from_slice(
+                    decode_hex(v)
+                        .map_err(|_| E::custom("Error decoding Secretkey bytes"))?
+                        .as_slice(),
+                ))
+            }
+        }
+
+        deserializer.deserialize_str(SecretKeyVisitor)
+    }
+}
+
 impl JsonSchema for SecretKey {
     fn schema_name() -> String {
         "SecretKey".to_owned()
@@ -61,13 +148,6 @@ impl JsonSchema for SecretKey {
             .insert("bytes".to_owned(), fixed_size_string);
         object_validation.required.insert("bytes".to_owned());
         Schema::Object(schema_object)
-    }
-}
-
-impl fmt::Display for PublicKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", encode_hex(self.point.as_bytes()))?;
-        Ok(())
     }
 }
 
@@ -94,42 +174,4 @@ impl JsonSchema for PublicKey {
         object_validation.required.insert("bytes".to_owned());
         Schema::Object(schema_object)
     }
-}
-
-pub fn point_from_hex<'de, D>(deserializer: D) -> Result<CompressedEdwardsY, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: &str = Deserialize::deserialize(deserializer)?;
-    Ok(CompressedEdwardsY::from_slice(
-        decode_hex(s)
-            .map_err(|_| D::Error::custom("Invalid hex string"))?
-            .as_slice(),
-    ))
-}
-
-pub fn sk_bytes_from_hex<'de, D>(deserializer: D) -> Result<[u8; 32], D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: &str = Deserialize::deserialize(deserializer)?;
-    Ok(decode_hex(s)
-        .map_err(|_| D::Error::custom("Invalid hex string"))?
-        .as_slice()
-        .try_into()
-        .map_err(|_| D::Error::custom("Invalid hex string"))?)
-}
-
-pub fn serialize_bytes<S>(bytes: &[u8; 32], serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    serializer.serialize_str(&encode_hex(bytes))
-}
-
-pub fn serialize_point<S>(point: &CompressedEdwardsY, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    serializer.serialize_str(&encode_hex(point.as_bytes()))
 }
