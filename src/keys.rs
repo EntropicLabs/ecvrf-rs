@@ -81,6 +81,17 @@ impl PublicKey {
     pub fn as_point(&self) -> &CompressedEdwardsY {
         &self.point
     }
+    
+    pub fn validate(&self) -> Result<(), VRFError> {
+        if let Some(point) = self.point.decompress() {
+            if point.mul_by_cofactor().compress() == CompressedEdwardsY::default() {
+                return Err(VRFError::InvalidPublicKey {});
+            }
+        } else {
+            return Err(VRFError::InvalidPublicKey {});
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
