@@ -6,13 +6,13 @@ use schemars::{
     JsonSchema,
 };
 use serde::{
-    de::{Error, MapAccess, SeqAccess, Visitor},
+    de::{Error, IgnoredAny, MapAccess, SeqAccess, Visitor},
     ser::SerializeStruct,
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
 use crate::{Proof, PublicKey, SecretKey};
-use std::{fmt::Write, num::ParseIntError};
+use std::{fmt::Write, marker::PhantomData, num::ParseIntError};
 
 impl AsRef<[u8]> for SecretKey {
     fn as_ref(&self) -> &[u8] {
@@ -149,6 +149,53 @@ impl<'de> Deserialize<'de> for Proof {
             Signer,
             Message,
             Proof,
+            Ignore,
+        }
+
+        struct FieldVisitor;
+        
+        impl<'de> Visitor<'de> for FieldVisitor {
+            type Value = Field;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("field identifier")
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                match v {
+                    0u64 => Ok(Field::Signer),
+                    1u64 => Ok(Field::Message),
+                    2u64 => Ok(Field::Proof),
+                    _ => Ok(Field::Ignore),
+                }
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                match v {
+                    "signer" => Ok(Field::Signer),
+                    "message" => Ok(Field::Message),
+                    "proof" => Ok(Field::Proof),
+                    _ => Ok(Field::Ignore),
+                }
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                match v {
+                    b"signer" => Ok(Field::Signer),
+                    b"message" => Ok(Field::Message),
+                    b"proof" => Ok(Field::Proof),
+                    _ => Ok(Field::Ignore),
+                }
+            }
         }
 
         impl<'de> Deserialize<'de> for Field {
@@ -156,53 +203,35 @@ impl<'de> Deserialize<'de> for Proof {
             where
                 D: Deserializer<'de>,
             {
-                struct FieldVisitor;
-
-                impl<'de> Visitor<'de> for FieldVisitor {
-                    type Value = Field;
-
-                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                        formatter.write_str("`signer` or `message` or `proof`")
-                    }
-
-                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-                    where
-                        E: Error,
-                    {
-                        match v {
-                            "signer" => Ok(Field::Signer),
-                            "message" => Ok(Field::Message),
-                            "proof" => Ok(Field::Proof),
-                            _ => Err(E::custom(format!("unknown field: {}", v))),
-                        }
-                    }
-                }
                 deserializer.deserialize_identifier(FieldVisitor)
             }
         }
 
-        struct ProofVisitor;
+        struct ProofVisitor<'de> {
+            marker: PhantomData<Proof>,
+            lifetime: PhantomData<&'de ()>,
+        }
 
-        impl<'de> Visitor<'de> for ProofVisitor {
+        impl<'de> Visitor<'de> for ProofVisitor<'de> {
             type Value = Proof;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("struct Proof")
             }
-
+            #[inline]
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
                 A: SeqAccess<'de>,
             {
                 let signer = seq
-                    .next_element()?
-                    .ok_or_else(|| A::Error::invalid_length(0, &self))?;
+                    .next_element::<PublicKey>()?
+                    .ok_or_else(|| A::Error::invalid_length(0, &"struct Proof with 3 elements"))?;
                 let message = seq
-                    .next_element()?
-                    .ok_or_else(|| A::Error::invalid_length(1, &self))?;
+                    .next_element::<&str>()?
+                    .ok_or_else(|| A::Error::invalid_length(1, &"struct Proof with 3 elements"))?;
                 let proof = seq
-                    .next_element()?
-                    .ok_or_else(|| A::Error::invalid_length(2, &self))?;
+                    .next_element::<&str>()?
+                    .ok_or_else(|| A::Error::invalid_length(2, &"struct Proof with 3 elements"))?;
                 Ok(Proof {
                     signer: signer,
                     message_bytes: decode_hex(message)
@@ -219,25 +248,31 @@ impl<'de> Deserialize<'de> for Proof {
                 let mut signer = None;
                 let mut message = None;
                 let mut proof = None;
-                while let Some(key) = map.next_key()? {
+                while let Some(key) = map.next_key::<Field>()? {
                     match key {
                         Field::Signer => {
                             if signer.is_some() {
                                 return Err(A::Error::duplicate_field("signer"));
                             }
-                            signer = Some(map.next_value()?);
+                            signer = Some(map.next_value::<PublicKey>()?);
                         }
                         Field::Message => {
                             if message.is_some() {
                                 return Err(A::Error::duplicate_field("message"));
                             }
-                            message = Some(map.next_value()?);
+                            message = Some(map.next_value::<&str>()?);
                         }
                         Field::Proof => {
                             if proof.is_some() {
                                 return Err(A::Error::duplicate_field("proof"));
                             }
-                            proof = Some(map.next_value()?);
+                            proof = Some(map.next_value::<&str>()?);
+                        }
+                        _ => {
+                            let _ = match map.next_value::<IgnoredAny>() {
+                                Ok(val) => val,
+                                Err(e) => return Err(e),
+                            };
                         }
                     }
                 }
@@ -255,7 +290,14 @@ impl<'de> Deserialize<'de> for Proof {
         }
 
         const FIELDS: &'static [&'static str] = &["signer", "message", "proof"];
-        deserializer.deserialize_struct("Proof", FIELDS, ProofVisitor)
+        deserializer.deserialize_struct(
+            "Proof",
+            FIELDS,
+            ProofVisitor {
+                marker: PhantomData::<Proof>,
+                lifetime: PhantomData,
+            },
+        )
     }
 }
 
