@@ -12,7 +12,10 @@ use serde::{
 };
 
 use crate::{Proof, PublicKey, SecretKey};
-use std::{fmt::Write, marker::PhantomData, num::ParseIntError};
+use std::{
+    fmt::{Formatter, Write},
+    num::ParseIntError,
+};
 
 impl AsRef<[u8]> for SecretKey {
     fn as_ref(&self) -> &[u8] {
@@ -153,11 +156,11 @@ impl<'de> Deserialize<'de> for Proof {
         }
 
         struct FieldVisitor;
-        
+
         impl<'de> Visitor<'de> for FieldVisitor {
             type Value = Field;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
                 formatter.write_str("field identifier")
             }
 
@@ -207,18 +210,15 @@ impl<'de> Deserialize<'de> for Proof {
             }
         }
 
-        struct ProofVisitor<'de> {
-            marker: PhantomData<Proof>,
-            lifetime: PhantomData<&'de ()>,
-        }
+        struct ProofVisitor;
 
-        impl<'de> Visitor<'de> for ProofVisitor<'de> {
+        impl<'de> Visitor<'de> for ProofVisitor {
             type Value = Proof;
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
                 formatter.write_str("struct Proof")
             }
-            #[inline]
+
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
                 A: SeqAccess<'de>,
@@ -227,20 +227,20 @@ impl<'de> Deserialize<'de> for Proof {
                     .next_element::<PublicKey>()?
                     .ok_or_else(|| A::Error::invalid_length(0, &"struct Proof with 3 elements"))?;
                 let message = seq
-                    .next_element::<&str>()?
+                    .next_element::<String>()?
                     .ok_or_else(|| A::Error::invalid_length(1, &"struct Proof with 3 elements"))?;
                 let proof = seq
-                    .next_element::<&str>()?
+                    .next_element::<String>()?
                     .ok_or_else(|| A::Error::invalid_length(2, &"struct Proof with 3 elements"))?;
                 Ok(Proof {
                     signer: signer,
-                    message_bytes: decode_hex(message)
+                    message_bytes: decode_hex(message.as_str())
                         .map_err(|_| A::Error::custom("Error decoding message"))?,
-                    proof_bytes: decode_hex(proof)
+                    proof_bytes: decode_hex(proof.as_str())
                         .map_err(|_| A::Error::custom("Error decoding proof"))?,
                 })
             }
-
+            
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
             where
                 A: MapAccess<'de>,
@@ -260,19 +260,16 @@ impl<'de> Deserialize<'de> for Proof {
                             if message.is_some() {
                                 return Err(A::Error::duplicate_field("message"));
                             }
-                            message = Some(map.next_value::<&str>()?);
+                            message = Some(map.next_value::<String>()?);
                         }
                         Field::Proof => {
                             if proof.is_some() {
                                 return Err(A::Error::duplicate_field("proof"));
                             }
-                            proof = Some(map.next_value::<&str>()?);
+                            proof = Some(map.next_value::<String>()?);
                         }
                         _ => {
-                            let _ = match map.next_value::<IgnoredAny>() {
-                                Ok(val) => val,
-                                Err(e) => return Err(e),
-                            };
+                            let _ = map.next_value::<IgnoredAny>()?;
                         }
                     }
                 }
@@ -281,23 +278,16 @@ impl<'de> Deserialize<'de> for Proof {
                 let proof = proof.ok_or_else(|| A::Error::missing_field("proof"))?;
                 Ok(Proof {
                     signer: signer,
-                    message_bytes: decode_hex(message)
+                    message_bytes: decode_hex(message.as_str())
                         .map_err(|_| A::Error::custom("Error decoding message"))?,
-                    proof_bytes: decode_hex(proof)
+                    proof_bytes: decode_hex(proof.as_str())
                         .map_err(|_| A::Error::custom("Error decoding proof"))?,
                 })
             }
         }
 
         const FIELDS: &'static [&'static str] = &["signer", "message", "proof"];
-        deserializer.deserialize_struct(
-            "Proof",
-            FIELDS,
-            ProofVisitor {
-                marker: PhantomData::<Proof>,
-                lifetime: PhantomData,
-            },
-        )
+        deserializer.deserialize_struct("Proof", FIELDS, ProofVisitor)
     }
 }
 
