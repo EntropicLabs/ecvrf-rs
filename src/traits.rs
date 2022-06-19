@@ -6,11 +6,12 @@ use schemars::{
     JsonSchema,
 };
 use serde::{
-    de::{Error, Visitor},
+    de::{Error, MapAccess, SeqAccess, Visitor},
+    ser::SerializeStruct,
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
-use crate::{PublicKey, SecretKey};
+use crate::{Proof, PublicKey, SecretKey};
 use std::{fmt::Write, num::ParseIntError};
 
 impl AsRef<[u8]> for SecretKey {
@@ -63,6 +64,19 @@ impl Serialize for SecretKey {
         S: Serializer,
     {
         serializer.serialize_str(&encode_hex(self.as_bytes()))
+    }
+}
+
+impl Serialize for Proof {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("Proof", 3)?;
+        state.serialize_field("signer", &self.signer)?;
+        state.serialize_field("message", &encode_hex(&self.message_bytes))?;
+        state.serialize_field("proof", &encode_hex(&self.proof_bytes))?;
+        state.end()
     }
 }
 
@@ -126,27 +140,137 @@ impl<'de> Deserialize<'de> for SecretKey {
     }
 }
 
+impl<'de> Deserialize<'de> for Proof {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        enum Field {
+            Signer,
+            Message,
+            Proof,
+        }
+
+        impl<'de> Deserialize<'de> for Field {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                struct FieldVisitor;
+
+                impl<'de> Visitor<'de> for FieldVisitor {
+                    type Value = Field;
+
+                    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                        formatter.write_str("`signer` or `message` or `proof`")
+                    }
+
+                    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                    where
+                        E: Error,
+                    {
+                        match v {
+                            "signer" => Ok(Field::Signer),
+                            "message" => Ok(Field::Message),
+                            "proof" => Ok(Field::Proof),
+                            _ => Err(E::custom(format!("unknown field: {}", v))),
+                        }
+                    }
+                }
+                deserializer.deserialize_identifier(FieldVisitor)
+            }
+        }
+
+        struct ProofVisitor;
+
+        impl<'de> Visitor<'de> for ProofVisitor {
+            type Value = Proof;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct Proof")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let signer = seq
+                    .next_element()?
+                    .ok_or_else(|| A::Error::invalid_length(0, &self))?;
+                let message = seq
+                    .next_element()?
+                    .ok_or_else(|| A::Error::invalid_length(1, &self))?;
+                let proof = seq
+                    .next_element()?
+                    .ok_or_else(|| A::Error::invalid_length(2, &self))?;
+                Ok(Proof {
+                    signer: signer,
+                    message_bytes: decode_hex(message)
+                        .map_err(|_| A::Error::custom("Error decoding message"))?,
+                    proof_bytes: decode_hex(proof)
+                        .map_err(|_| A::Error::custom("Error decoding proof"))?,
+                })
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut signer = None;
+                let mut message = None;
+                let mut proof = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Signer => {
+                            if signer.is_some() {
+                                return Err(A::Error::duplicate_field("signer"));
+                            }
+                            signer = Some(map.next_value()?);
+                        }
+                        Field::Message => {
+                            if message.is_some() {
+                                return Err(A::Error::duplicate_field("message"));
+                            }
+                            message = Some(map.next_value()?);
+                        }
+                        Field::Proof => {
+                            if proof.is_some() {
+                                return Err(A::Error::duplicate_field("proof"));
+                            }
+                            proof = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let signer = signer.ok_or_else(|| A::Error::missing_field("signer"))?;
+                let message = message.ok_or_else(|| A::Error::missing_field("message"))?;
+                let proof = proof.ok_or_else(|| A::Error::missing_field("proof"))?;
+                Ok(Proof {
+                    signer: signer,
+                    message_bytes: decode_hex(message)
+                        .map_err(|_| A::Error::custom("Error decoding message"))?,
+                    proof_bytes: decode_hex(proof)
+                        .map_err(|_| A::Error::custom("Error decoding proof"))?,
+                })
+            }
+        }
+
+        const FIELDS: &'static [&'static str] = &["signer", "message", "proof"];
+        deserializer.deserialize_struct("Proof", FIELDS, ProofVisitor)
+    }
+}
+
 impl JsonSchema for SecretKey {
     fn schema_name() -> String {
         "SecretKey".to_owned()
     }
-    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
         let mut schema_object = SchemaObject {
-            instance_type: Some(InstanceType::Object.into()),
+            instance_type: Some(InstanceType::String.into()),
             ..Default::default()
         };
-        let object_validation = schema_object.object();
-
-        let mut fixed_size_string = gen.subschema_for::<String>();
-        if let Schema::Object(schema_object) = &mut fixed_size_string {
-            let validation = schema_object.string();
-            validation.min_length = Some(64u32);
-            validation.max_length = Some(64u32);
-        }
-        object_validation
-            .properties
-            .insert("bytes".to_owned(), fixed_size_string);
-        object_validation.required.insert("bytes".to_owned());
+        let string_validation = schema_object.string();
+        string_validation.min_length = Some(64u32);
+        string_validation.max_length = Some(64u32);
         Schema::Object(schema_object)
     }
 }
@@ -155,23 +279,51 @@ impl JsonSchema for PublicKey {
     fn schema_name() -> String {
         "PublicKey".to_owned()
     }
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        let mut schema_object = SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            ..Default::default()
+        };
+        let string_validation = schema_object.string();
+        string_validation.min_length = Some(64u32);
+        string_validation.max_length = Some(64u32);
+        Schema::Object(schema_object)
+    }
+}
+
+impl JsonSchema for Proof {
+    fn schema_name() -> String {
+        "Proof".to_owned()
+    }
+
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         let mut schema_object = SchemaObject {
             instance_type: Some(InstanceType::Object.into()),
             ..Default::default()
         };
         let object_validation = schema_object.object();
-
-        let mut fixed_size_string = gen.subschema_for::<String>();
-        if let Schema::Object(schema_object) = &mut fixed_size_string {
-            let validation = schema_object.string();
-            validation.min_length = Some(64u32);
-            validation.max_length = Some(64u32);
+        {
+            // signer
+            object_validation
+                .properties
+                .insert("signer".to_owned(), gen.subschema_for::<PublicKey>());
+            object_validation.required.insert("signer".to_owned());
         }
-        object_validation
-            .properties
-            .insert("bytes".to_owned(), fixed_size_string);
-        object_validation.required.insert("bytes".to_owned());
+        {
+            // message
+            object_validation
+                .properties
+                .insert("message".to_owned(), gen.subschema_for::<String>());
+            object_validation.required.insert("message".to_owned());
+        }
+
+        {
+            // proof
+            object_validation
+                .properties
+                .insert("proof".to_owned(), gen.subschema_for::<String>());
+            object_validation.required.insert("proof".to_owned());
+        }
         Schema::Object(schema_object)
     }
 }
