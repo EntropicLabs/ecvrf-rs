@@ -6,12 +6,12 @@ use sha2::{Digest, Sha512};
 
 use crate::errors::VRFError;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecretKey {
     pub(crate) bytes: [u8; 32],
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PublicKey {
     pub(crate) point: CompressedEdwardsY,
 }

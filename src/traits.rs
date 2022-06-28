@@ -233,7 +233,7 @@ impl<'de> Deserialize<'de> for Proof {
                     .next_element::<String>()?
                     .ok_or_else(|| A::Error::invalid_length(2, &"struct Proof with 3 elements"))?;
                 Ok(Proof {
-                    signer: signer,
+                    signer,
                     message_bytes: decode_hex(message.as_str())
                         .map_err(|_| A::Error::custom("Error decoding message"))?,
                     proof_bytes: decode_hex(proof.as_str())
@@ -277,7 +277,7 @@ impl<'de> Deserialize<'de> for Proof {
                 let message = message.ok_or_else(|| A::Error::missing_field("message"))?;
                 let proof = proof.ok_or_else(|| A::Error::missing_field("proof"))?;
                 Ok(Proof {
-                    signer: signer,
+                    signer,
                     message_bytes: decode_hex(message.as_str())
                         .map_err(|_| A::Error::custom("Error decoding message"))?,
                     proof_bytes: decode_hex(proof.as_str())
@@ -286,7 +286,7 @@ impl<'de> Deserialize<'de> for Proof {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &["signer", "message", "proof"];
+        const FIELDS: &[&str] = &["signer", "message", "proof"];
         deserializer.deserialize_struct("Proof", FIELDS, ProofVisitor)
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     utils::{prove, verify_proof},
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proof {
     pub signer: PublicKey,
     pub message_bytes: Vec<u8>,
