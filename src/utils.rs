@@ -45,7 +45,9 @@ pub fn hash_points(points: &[&CompressedEdwardsY]) -> [u8; 32] {
     hash
 }
 
-pub fn decode_proof(proof_bytes: &[u8]) -> Result<([u8; 32], [u8; 16], [u8; 32]), VRFError> {
+pub type DecodedProof = ([u8; 32], [u8; 16], [u8; 32]);
+
+pub fn decode_proof(proof_bytes: &[u8]) -> Result<DecodedProof, VRFError> {
     let gamma = &proof_bytes[..32];
     let c = &proof_bytes[32..48];
     let s = &proof_bytes[48..80];

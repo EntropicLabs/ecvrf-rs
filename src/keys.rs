@@ -17,23 +17,33 @@ pub struct PublicKey {
 }
 
 impl SecretKey {
+    #[must_use]
     pub fn new(bytes: &[u8; 32]) -> Self {
         SecretKey { bytes: *bytes }
     }
+
+    #[must_use]
     pub fn from_slice(bytes: &[u8]) -> Self {
         let mut b = [0u8; 32];
         b.copy_from_slice(bytes);
         SecretKey { bytes: b }
     }
 
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.bytes
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 32] {
         self.bytes
     }
 
+    /// Extracts the public key and scalar of this [`SecretKey`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the secret key is invalid.
     pub fn extract_public_key_and_scalar(&self) -> Result<(PublicKey, Scalar), VRFError> {
         let mut hasher = Sha512::new();
         hasher.update(&self.bytes);
@@ -58,10 +68,12 @@ impl SecretKey {
 }
 
 impl PublicKey {
+    #[must_use]
     pub fn new(point: CompressedEdwardsY) -> Self {
         PublicKey { point }
     }
 
+    #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let mut b = [0u8; 32];
         b.copy_from_slice(bytes);
@@ -70,18 +82,26 @@ impl PublicKey {
         }
     }
 
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         self.point.as_bytes()
     }
 
+    #[must_use]
     pub fn to_bytes(&self) -> [u8; 32] {
         self.point.to_bytes()
     }
 
+    #[must_use]
     pub fn as_point(&self) -> &CompressedEdwardsY {
         &self.point
     }
-    
+
+    /// Validates this [`PublicKey`].
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the public key multiplied by the cofactor is the identity of the curve.
     pub fn validate(&self) -> Result<(), VRFError> {
         if let Some(point) = self.point.decompress() {
             if point.mul_by_cofactor().compress() == CompressedEdwardsY::default() {

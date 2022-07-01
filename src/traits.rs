@@ -23,6 +23,11 @@ impl AsRef<[u8]> for SecretKey {
     }
 }
 
+/// Decodes a hex-encoded string into a byte array.
+///
+/// # Errors
+///
+/// This function will return an error if the string is not hex-encoded.
 pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
     (0..s.len())
         .step_by(2)
@@ -30,6 +35,12 @@ pub fn decode_hex(s: &str) -> Result<Vec<u8>, ParseIntError> {
         .collect()
 }
 
+/// Encodes a byte array into a hex-encoded string.
+///
+/// # Panics
+///
+/// Panics if the call to [`write!`] returns an error.
+#[must_use]
 pub fn encode_hex(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
@@ -144,6 +155,7 @@ impl<'de> Deserialize<'de> for SecretKey {
 }
 
 impl<'de> Deserialize<'de> for Proof {
+    #[allow(clippy::too_many_lines)]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -240,7 +252,7 @@ impl<'de> Deserialize<'de> for Proof {
                         .map_err(|_| A::Error::custom("Error decoding proof"))?,
                 })
             }
-            
+
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
             where
                 A: MapAccess<'de>,
@@ -268,7 +280,7 @@ impl<'de> Deserialize<'de> for Proof {
                             }
                             proof = Some(map.next_value::<String>()?);
                         }
-                        _ => {
+                        Field::Ignore => {
                             let _ = map.next_value::<IgnoredAny>()?;
                         }
                     }
