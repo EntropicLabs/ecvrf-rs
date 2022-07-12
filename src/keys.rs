@@ -4,7 +4,7 @@ use curve25519_dalek::{
 
 use sha2::{Digest, Sha512};
 
-use crate::errors::VRFError;
+use crate::{errors::VRFError, utils::WEAK_KEYS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SecretKey {
@@ -103,8 +103,8 @@ impl PublicKey {
     ///
     /// This function will return an error if the public key multiplied by the cofactor is the identity of the curve.
     pub fn validate(&self) -> Result<(), VRFError> {
-        if let Some(point) = self.point.decompress() {
-            if point.mul_by_cofactor().compress() == CompressedEdwardsY::default() {
+        if let Some(_) = self.point.decompress() {
+            if WEAK_KEYS.contains(self.point.as_bytes()) {
                 return Err(VRFError::InvalidPublicKey {});
             }
         } else {
