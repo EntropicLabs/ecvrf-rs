@@ -103,7 +103,7 @@ impl PublicKey {
     ///
     /// This function will return an error if the public key multiplied by the cofactor is the identity of the curve.
     pub fn validate(&self) -> Result<(), VRFError> {
-        if let Some(_) = self.point.decompress() {
+        if self.point.decompress().is_some() {
             if WEAK_KEYS.contains(self.point.as_bytes()) {
                 return Err(VRFError::InvalidPublicKey {});
             }
