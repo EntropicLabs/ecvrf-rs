@@ -1,11 +1,23 @@
 [package]
 name = "ecvrf"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+authors = ["Amit Prasad <mail@amitprasad.dev>"]
+license = "Apache-2.0"
+repository = "https://github.com/EntropicLabs/ecvrf-rs"
+categories = ["cryptography"]
+description = "Elliptic Curve VRF implemented in Rust"
+exclude = [
+    "**/.gitignore",
+    ".gitignore",
+    ".travis.yml",
+]
+
+
 
 [dependencies]
 sha2 = { version = "0.10.2", default-features = false }
-curve25519-dalek = { git = "https://github.com/AmitPr/curve25519-dalek", default-features = false, features = ["alloc", "u64_backend"] }
+curve25519-entropic = { version= "3.2.1", default-features = false, features = ["alloc", "u64_backend"] }
 thiserror = "1.0.31"
 schemars = "0.8.8"
 serde = { version = "1.0.137", default-features = false, features = ["derive"] }

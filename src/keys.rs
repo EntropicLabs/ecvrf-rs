@@ -1,4 +1,4 @@
-use curve25519_dalek::{
+use curve25519_entropic::{
     constants::ED25519_BASEPOINT_TABLE, edwards::CompressedEdwardsY, scalar::Scalar,
 };
 
